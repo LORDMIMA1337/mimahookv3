@@ -28847,6 +28847,84 @@ local v13
 v13 = v2:CreateTab({ Name = "Misc", SectionsExpanded = true })
 local v14
 v14 = v13:CreateSection({ Name = "Performance", Expanded = true })
+do
+	local mimaTheme = ((typeof(getgenv) == "function" and getgenv()) or _G).MimaThemeState
+	if type(mimaTheme) == "table" and mimaTheme.SetRGB then
+		local rgbSection = v13:CreateSection({ Name = "RGB & Colors", Expanded = true })
+		local rgb = { 82, 140, 222 }
+		local presets = {
+			Blue = { 82, 140, 222 },
+			Red = { 220, 60, 60 },
+			Green = { 70, 200, 100 },
+			Purple = { 150, 90, 230 },
+			Pink = { 235, 100, 175 },
+			Orange = { 240, 145, 50 },
+			Cyan = { 60, 200, 220 },
+			White = { 235, 235, 235 },
+		}
+		local presetNames = { "Blue", "Red", "Green", "Purple", "Pink", "Orange", "Cyan", "White" }
+
+		local function applyRGB()
+			if not mimaTheme.Rainbow then
+				mimaTheme.SetRGB(rgb[1], rgb[2], rgb[3])
+			end
+		end
+
+		rgbSection:CreateToggle({
+			Name = "Rainbow UI",
+			Default = false,
+			Callback = function(on)
+				mimaTheme.SetRainbow(on == true)
+				if on ~= true then
+					applyRGB()
+				end
+			end,
+		})
+
+		rgbSection:CreateSlider({
+			Name = "Rainbow Speed",
+			Min = 1,
+			Max = 30,
+			Default = 5,
+			AllowDecimals = false,
+			Increment = 1,
+			Unit = "",
+			Callback = function(v)
+				mimaTheme.SetSpeed(v)
+			end,
+		})
+
+		rgbSection:CreateDropdown({
+			Name = "Color Preset",
+			Options = presetNames,
+			Default = "Blue",
+			Callback = function(name)
+				local c = presets[name]
+				if c then
+					rgb[1], rgb[2], rgb[3] = c[1], c[2], c[3]
+					applyRGB()
+				end
+			end,
+		})
+
+		for index, channel in ipairs({ "Red", "Green", "Blue" }) do
+			rgbSection:CreateSlider({
+				Name = channel,
+				Min = 0,
+				Max = 255,
+				Default = rgb[index],
+				AllowDecimals = false,
+				Increment = 1,
+				Unit = "",
+				Callback = function(v)
+					rgb[index] = math.clamp(math.floor(tonumber(v) or 0), 0, 255)
+					applyRGB()
+				end,
+			})
+		end
+	end
+end
+
 local flag2 = false
 
 v14:CreateSlider({

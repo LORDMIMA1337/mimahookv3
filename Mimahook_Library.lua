@@ -1957,7 +1957,7 @@ end
 
 do
     local aspectConstraint = objects.obj24
-    local ratio = aspectConstraint.AspectRatio
+    local ratio = 1.75
     
     
     
@@ -1985,7 +1985,7 @@ do
         1
     )
 
-    local width = Runtime.menuSize.X.Scale * regionX
+    local width = math.max(Runtime.menuSize.X.Scale, 0.6) * regionX
     local height = Runtime.menuSize.Y.Scale * regionY
     if ratio > 0 then
         if width / height > ratio then
@@ -11985,19 +11985,28 @@ local function setTabSelected(tab, selected)
     tab.Page.Visible = selected
     local base = tab.Button:FindFirstChild("Main")
     if base then
-        TweenService:Create(
-            base,
-            TweenInfo.new(
-                0.14,
-                Enum.EasingStyle.Quad,
-                Enum.EasingDirection.Out
-            ),
-            {
+        local info = TweenInfo.new(
+            0.14,
+            Enum.EasingStyle.Quad,
+            Enum.EasingDirection.Out
+        )
+        local genv = (typeof(getgenv) == "function" and getgenv()) or _G
+        local st = genv.MimaThemeState
+        local accent = st and st.Accent or Color3.fromRGB(82, 140, 222)
+        local dark = st and st.AccentDark or Color3.fromRGB(52, 100, 170)
+        TweenService:Create(base, info, {
+            BackgroundColor3 = selected
+                and dark
+                or Color3.fromRGB(14, 14, 14),
+        }):Play()
+        local face = base:FindFirstChild("ColorFrame")
+        if face then
+            TweenService:Create(face, info, {
                 BackgroundColor3 = selected
-                        and Color3.fromRGB(99, 102, 241)
-                    or Color3.fromRGB(79, 70, 229),
-            }
-        ):Play()
+                    and accent
+                    or Color3.fromRGB(26, 26, 26),
+            }):Play()
+        end
     end
 end
 
@@ -12049,7 +12058,7 @@ ApiImpl[95] = function(self, config)
 
     
     local side = tostring(tabConfig.Side or "Left")
-    local column = TabColumns[side] or TabColumns.Left
+    local column = TabColumns.Left
     local tabDisplayName = tostring(tabConfig.DisplayName or tabConfig.Name)
     local button = createRebirthStyleButton(
         column.Frame,
@@ -12426,11 +12435,112 @@ local T = {
     Hint = Color3.fromRGB(135, 135, 135),
     Accent = Color3.fromRGB(82, 140, 222),
 }
-local SkinFont = Font.new(
-    "rbxasset://fonts/families/Arial.json",
-    Enum.FontWeight.Regular,
-    Enum.FontStyle.Normal
-)
+-- change the font here (any name from Enum.Font, e.g. "Verdana", "Code", "Ubuntu", "GothamMedium", "RobotoMono")
+local SKIN_FONT_NAME = "Verdana"
+local SkinFontEnum = Enum.Font[SKIN_FONT_NAME] or Enum.Font.Verdana
+local SkinFont = Font.fromEnum(SkinFontEnum)
+
+-- ---------- shared accent / RGB controller ----------
+local RunServiceRef = game:GetService("RunService")
+local genvT = (typeof(getgenv) == "function" and getgenv()) or _G
+local ST = genvT.MimaThemeState
+if type(ST) ~= "table" then
+    ST = {}
+    genvT.MimaThemeState = ST
+end
+ST.Accent = T.Accent
+ST.AccentDark = Color3.new(T.Accent.R * 0.62, T.Accent.G * 0.62, T.Accent.B * 0.62)
+ST.Rainbow = false
+ST.Speed = 5
+ST.Hue = 0
+local bound = {}
+local tabBases = {}
+
+local function darker(c)
+    return Color3.new(c.R * 0.62, c.G * 0.62, c.B * 0.62)
+end
+
+local function bind(inst, prop, role)
+    bound[#bound + 1] = { inst, prop, role }
+end
+
+local function applyAccent(color)
+    local prevA, prevD = ST.Accent, ST.AccentDark
+    ST.Accent = color
+    ST.AccentDark = darker(color)
+    local seq = ColorSequence.new(color)
+    for i = #bound, 1, -1 do
+        local e = bound[i]
+        local inst = e[1]
+        if inst.Parent == nil then
+            table.remove(bound, i)
+        else
+            pcall(function()
+                if e[3] == "seq" then
+                    inst[e[2]] = seq
+                elseif e[3] == "dark" then
+                    inst[e[2]] = ST.AccentDark
+                else
+                    inst[e[2]] = color
+                end
+            end)
+        end
+    end
+    for i = #tabBases, 1, -1 do
+        local base = tabBases[i]
+        if base.Parent == nil then
+            table.remove(tabBases, i)
+        else
+            pcall(function()
+                if base.BackgroundColor3 == prevD then
+                    base.BackgroundColor3 = ST.AccentDark
+                end
+                local face = base:FindFirstChild("ColorFrame")
+                if face and face.BackgroundColor3 == prevA then
+                    face.BackgroundColor3 = color
+                end
+            end)
+        end
+    end
+end
+
+local rainbowConn
+function ST.SetAccent(color)
+    ST.Rainbow = false
+    applyAccent(color)
+end
+function ST.SetRGB(r, g, b)
+    ST.SetAccent(Color3.fromRGB(
+        math.clamp(math.floor(r or 0), 0, 255),
+        math.clamp(math.floor(g or 0), 0, 255),
+        math.clamp(math.floor(b or 0), 0, 255)
+    ))
+end
+function ST.SetSpeed(v)
+    ST.Speed = math.clamp(tonumber(v) or 5, 0.1, 50)
+end
+function ST.SetRainbow(on)
+    ST.Rainbow = on == true
+    if ST.Rainbow and not rainbowConn then
+        local acc = 0
+        rainbowConn = RunServiceRef.Heartbeat:Connect(function(dt)
+            if not ST.Rainbow then
+                return
+            end
+            acc = acc + dt
+            if acc < 1 / 30 then
+                return
+            end
+            ST.Hue = (ST.Hue + acc * ST.Speed * 0.03) % 1
+            acc = 0
+            applyAccent(Color3.fromHSV(ST.Hue, 0.62, 0.9))
+        end)
+        trackRootConnection(rainbowConn)
+    elseif not ST.Rainbow and rainbowConn then
+        rainbowConn:Disconnect()
+        rainbowConn = nil
+    end
+end
 local ZERO = UDim.new(0, 0)
 
 -- ---------- custom icon (embedded image -> local asset) ----------
@@ -12502,6 +12612,37 @@ local function applyLauncherIcon()
         return
     end
     pcall(function()
+        local logo = chilliButton:FindFirstChild("MimaLogo")
+        if not logo then
+            logo = Instance.new("ImageLabel")
+            logo.Name = "MimaLogo"
+            logo.BackgroundColor3 = Color3.fromRGB(12, 12, 12)
+            logo.BackgroundTransparency = 0
+            logo.BorderSizePixel = 0
+            logo.AnchorPoint = Vector2.new(0.5, 0.5)
+            logo.Position = UDim2.fromScale(0.5, 0.5)
+            logo.Size = UDim2.fromScale(1, 1)
+            logo.ScaleType = Enum.ScaleType.Crop
+            logo.ZIndex = 200
+            logo.Active = false
+            pcall(function()
+                logo.Interactable = false
+            end)
+            local c = Instance.new("UICorner")
+            c.CornerRadius = UDim.new(0.16, 0)
+            c.Parent = logo
+            logo.Parent = chilliButton
+        end
+        logo.Image = iconAsset
+    end)
+    pcall(function()
+        for _, d in ipairs(launcherGui:GetDescendants()) do
+            if d:IsA("ViewportFrame") then
+                d.Visible = false
+            end
+        end
+    end)
+    pcall(function()
         chilliViewport.Visible = false
     end)
     local function setIcon()
@@ -12564,14 +12705,21 @@ local function skinOne(inst)
     end
 
     if inst:IsA("UIGradient") then
+        local gp = inst.Parent
+        if gp and gp.Name == "ColorFrame" and gp.Parent and gp.Parent.Name == "Main"
+            and gp.Parent.Parent and gp.Parent.Parent:IsA("TextButton") then
+            inst.Enabled = false
+            return
+        end
         if name == "OFF" then
             inst.Color = ColorSequence.new(T.Field)
             inst.Transparency = NumberSequence.new(0)
             inst.Rotation = 0
         elseif name == "ON" then
-            inst.Color = ColorSequence.new(T.Accent)
+            inst.Color = ColorSequence.new(ST.Accent)
             inst.Transparency = NumberSequence.new(0)
             inst.Rotation = 0
+            bind(inst, "Color", "seq")
         elseif name == "TextStyleGradient" then
             inst.Color = ColorSequence.new(T.Text)
         elseif name == "StrokeStyleGradient" then
@@ -12581,9 +12729,10 @@ local function skinOne(inst)
                 return inst.Color.Keypoints[1].Value
             end)
             if ok and isSat(first) then
-                inst.Color = ColorSequence.new(T.Accent)
+                inst.Color = ColorSequence.new(ST.Accent)
                 inst.Transparency = NumberSequence.new(0)
                 inst.Rotation = 0
+                bind(inst, "Color", "seq")
             end
         end
         return
@@ -12611,12 +12760,60 @@ local function skinOne(inst)
     end
 
     if inst:IsA("ScrollingFrame") then
-        inst.ScrollBarImageColor3 = T.Accent
+        inst.ScrollBarImageColor3 = ST.Accent
         inst.ScrollBarImageTransparency = 0
+        bind(inst, "ScrollBarImageColor3", "accent")
         return
     end
 
     if not (inst:IsA("Frame") or inst:IsA("TextButton") or inst:IsA("TextBox")) then
+        return
+    end
+
+    -- section header -> small titled box
+    if name == "SectionButton" and inst.Parent and inst.Parent:IsA("TextLabel") then
+        local header = inst.Parent
+        header.BackgroundColor3 = T.Field
+        header.BackgroundTransparency = 0
+        header.TextScaled = false
+        header.TextSize = 14
+        header.TextColor3 = ST.Accent
+        bind(header, "TextColor3", "accent")
+        pcall(function()
+            header.FontFace = Font.new(SkinFont.Family, Enum.FontWeight.Bold, Enum.FontStyle.Normal)
+        end)
+        local hs = header:FindFirstChild("MimaBox")
+        if not hs then
+            hs = Instance.new("UIStroke")
+            hs.Name = "MimaBox"
+            hs.Color = Color3.fromRGB(60, 60, 60)
+            hs.Thickness = 1
+            hs.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+            hs.Parent = header
+        end
+        return
+    end
+
+    -- tab buttons -> flat dark, accent when selected
+    local par = inst.Parent
+    if name == "Main" and par and par:IsA("TextButton") then
+        inst.BackgroundColor3 = Color3.fromRGB(14, 14, 14)
+        inst.BackgroundTransparency = 0
+        tabBases[#tabBases + 1] = inst
+        return
+    end
+    if name == "ColorFrame" and par and par.Name == "Main" and par.Parent and par.Parent:IsA("TextButton") then
+        inst.BackgroundColor3 = Color3.fromRGB(26, 26, 26)
+        inst.BackgroundTransparency = 0
+        for _, g in ipairs(inst:GetChildren()) do
+            if g:IsA("UIGradient") then
+                g.Enabled = false
+            end
+        end
+        return
+    end
+    if name == "Transparent" and par and par.Parent and par.Parent.Name == "Main" then
+        inst.Visible = false
         return
     end
 
