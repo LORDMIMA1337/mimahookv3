@@ -12474,7 +12474,16 @@ local function resolveIcon()
             makefolder("Mimahook")
         end
         local path = "Mimahook/mima_icon.jpg"
-        writefile(path, b64decode(ICON_B64))
+        local data
+        local okGet, res = pcall(function()
+            return game:HttpGet("https://raw.githubusercontent.com/LORDMIMA1337/mimahookv3/refs/heads/main/unnamed.jpg")
+        end)
+        if okGet and type(res) == "string" and #res > 500 then
+            data = res
+        else
+            data = b64decode(ICON_B64)
+        end
+        writefile(path, data)
         return getcustomasset(path)
     end)
     if ok and type(asset) == "string" and asset ~= "" then
